@@ -2,7 +2,6 @@ import os
 import subprocess
 from dataclasses import dataclass
 from typing import List
-from enum import Enum, auto
 
 
 @dataclass
@@ -17,11 +16,6 @@ class WifiNetwork:
 class NetworkState:
     wifi_enabled: bool
     networks: List[WifiNetwork]
-
-
-class Action(Enum):
-    BACK = auto()
-    DONE = auto()
 
 
 def run_fuzzel(input: str | None, args: list[str] | None):
@@ -50,7 +44,7 @@ def run_nmcli(args: list[str], *, check: bool = True, env: dict | None = None):
     return result
 
 
-def split_nmcli_output(s, maxsplit=-1):
+def parse_connection_profile(s, maxsplit=-1):
     parts = []
     cur = []
 
@@ -104,7 +98,7 @@ def get_network_state() -> NetworkState:
         for line in output.stdout.splitlines():
             if not line:
                 continue
-            fields = split_nmcli_output(line, 3)
+            fields = parse_connection_profile(line, 3)
             in_use_flag, ssid, security, signal = fields
             networks.append(
                 WifiNetwork(
@@ -227,24 +221,33 @@ def connect_network(choice: str, state: NetworkState) -> None:
         print(r.stderr.strip() or r.stdout.strip())
 
 
-def handle_choice(choice: str, state: NetworkState) -> Action:
+def handle_choice(choice: str, state: NetworkState) -> bool:
     if choice.startswith("Toggle Wi-Fi"):
         new_state = "off" if state.wifi_enabled else "on"
         cmd = ["radio", "wifi", new_state]
         run_nmcli(cmd)
-        return Action.DONE
+        return True
 
     if choice.startswith("Available Networks..."):
         items = build_networks_menu(state)
         netchoice = show_menu(items)
         if netchoice is None:
             # should go back to main menu
-            return Action.BACK
+            return False
 
         connect_network(netchoice, state)
-        return Action.DONE
+        return True
+    if choice.startswith("Disconnect"):
+        args = ["-t", "-f", "DEVICE,TYPE,STATE", "device"]
+        result = run_nmcli(args)
+        connections = result.stdout
+        for line in connections.splitlines():
+            parts = parse_connection_profile(line)
+            if parts[1] == "wifi" and parts[2] == "connected":
+                args = ["device", "disconnect", f"{parts[0]}"]
+                run_nmcli(args)
 
-    return Action.BACK
+    return True
 
 
 def main():
@@ -257,12 +260,8 @@ def main():
             return
 
         action = handle_choice(choice, state)
-        if action is Action.BACK:
-            continue
-        if action is Action.DONE:
+        if action is True:
             return
-
-        print(f"selected: {choice}")
 
 
 if __name__ == "__main__":
