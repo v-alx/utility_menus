@@ -1,7 +1,10 @@
 [project]
-name = "python-drop-menu"
+name = "wifi_menu"
 version = "0.1.0"
-description = "Add your description here"
-readme = "README.md"
+description = "Fuzzel and nmcli based wifi manipulation menu"
+readme = "docs/README.md"
 requires-python = ">=3.12"
 dependencies = []
+
+[project.scripts]
+wifi_menu = "wifi_menu.__main__:main"
